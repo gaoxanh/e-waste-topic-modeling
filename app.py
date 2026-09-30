@@ -2,7 +2,15 @@ from pathlib import Path
 import joblib
 import streamlit as st
 import pandas as pd
+import re
+import html
+import string
+import nltk
 
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords, wordnet
+from nltk import pos_tag_sents
+from nltk.stem import WordNetLemmatizer
 # ============================================================
 # 1. PROJECT PATH
 # ============================================================
@@ -235,6 +243,169 @@ st.subheader("Complaint Topic Profile")
 
 st.bar_chart(asin_topic_values)
 
+# =========================
+# NLP PREPROCESSING
+# =========================
+
+lemmatizer = WordNetLemmatizer()
+
+stop_words = set(stopwords.words("english"))
+negation_words = {"no", "not", "never", "neither", "nor"}
+stop_words = stop_words - negation_words
+
+
+def normalize_text(text):
+    if text is None:
+        return ""
+
+    text = str(text)
+    text = html.unescape(text)
+
+    # Remove HTML tags
+    text = re.sub(r"<[^>]+>", " ", text)
+
+    # Remove URLs
+    text = re.sub(r"https?://\S+|www\.\S+", " ", text)
+
+    # Remove escaped line breaks / tabs
+    text = re.sub(r"\\[nrt]", " ", text)
+
+    # Normalize whitespace
+    text = re.sub(r"\s+", " ", text)
+
+    # Lowercase
+    text = text.lower()
+
+    # Reduce repeated punctuation
+    text = re.sub(r"!{3,}", "!!", text)
+    text = re.sub(r"\?{3,}", "??", text)
+    text = re.sub(r"\.{4,}", "...", text)
+
+    return text.strip()
+
+
+def normalize_tokens(tokens):
+    normalized = []
+
+    contraction_map = {
+        "'m": "am",
+        "'re": "are",
+        "'ve": "have",
+        "'ll": "will",
+        "'d": "would",
+    }
+
+    i = 0
+
+    while i < len(tokens):
+        token = tokens[i]
+
+        # Emoticons
+        if token in {":(", ":-(", "D:<"}:
+            normalized.append("EMOTION_SAD")
+            i += 1
+            continue
+
+        if token in {":)", ":-)"}:
+            normalized.append("EMOTION_HAPPY")
+            i += 1
+            continue
+
+        # Negative contractions
+        if i + 1 < len(tokens) and tokens[i + 1] == "n't":
+            if token == "ca":
+                normalized.extend(["can", "not"])
+                i += 2
+                continue
+
+            if token == "wo":
+                normalized.extend(["will", "not"])
+                i += 2
+                continue
+
+            if token == "sha":
+                normalized.extend(["shall", "not"])
+                i += 2
+                continue
+
+        if token == "n't":
+            normalized.append("not")
+            i += 1
+            continue
+
+        if token in contraction_map:
+            normalized.append(contraction_map[token])
+        else:
+            normalized.append(token)
+
+        i += 1
+
+    return normalized
+
+def get_wordnet_pos(tag):
+    if tag.startswith("J"):
+        return wordnet.ADJ
+    elif tag.startswith("V"):
+        return wordnet.VERB
+    elif tag.startswith("N"):
+        return wordnet.NOUN
+    elif tag.startswith("R"):
+        return wordnet.ADV
+    else:
+        return wordnet.NOUN
+
+
+def lemmatize_tokens(tokens):
+    if not tokens:
+        return []
+
+    tagged = pos_tag_sents([tokens])[0]
+
+    result = []
+
+    for token, tag in tagged:
+        # Keep special emotion tokens
+        if token.startswith("EMOTION_"):
+            result.append(token)
+            continue
+
+        # Remove punctuation
+        if token in string.punctuation:
+            continue
+
+        pos = get_wordnet_pos(tag)
+        lemma = lemmatizer.lemmatize(token, pos=pos)
+
+        result.append(lemma)
+
+    return result
+
+def remove_stopwords_final(tokens):
+    return [
+        token
+        for token in tokens
+        if token.startswith("EMOTION_") or token not in stop_words
+    ]
+
+def preprocess_for_lda(text):
+    text = normalize_text(text)
+
+    if not text:
+        return []
+
+    tokens = word_tokenize(text)
+    tokens = normalize_tokens(tokens)
+    tokens = lemmatize_tokens(tokens)
+    tokens = remove_stopwords_final(tokens)
+
+    return tokens
+
+def prepare_lda_text(text):
+    tokens = preprocess_for_lda(text)
+    return " ".join(tokens)
+
+
+
 # ============================================================
 # 8. REVIEW ANALYZER
 # ============================================================
@@ -264,6 +435,7 @@ if analyze_button:
     if not review_text.strip():
         st.warning("Please enter a review.")
     else:
+        lda_text = prepare_lda_text(review_text)
 
         # Transform review using the trained vocabulary
         review_dtm = vectorizer.transform(
