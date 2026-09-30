@@ -5,7 +5,7 @@ import pandas as pd
 import re
 import html
 import string
-import nltk
+
 
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords, wordnet
@@ -18,7 +18,20 @@ from nltk.stem import WordNetLemmatizer
 PROJECT_ROOT = Path(__file__).resolve().parent
 MODEL_DIR = PROJECT_ROOT / "models"
 
+import nltk
 
+for resource in [
+    "stopwords",
+    "punkt",
+    "punkt_tab",
+    "wordnet",
+    "averaged_perceptron_tagger",
+    "averaged_perceptron_tagger_eng",
+]:
+    try:
+        nltk.data.find(resource)
+    except LookupError:
+        nltk.download(resource, quiet=True)
 # ============================================================
 # 2. LOAD MODEL ARTIFACTS
 # ============================================================
