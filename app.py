@@ -18,6 +18,40 @@ from nltk.stem import WordNetLemmatizer
 PROJECT_ROOT = Path(__file__).resolve().parent
 MODEL_DIR = PROJECT_ROOT / "models"
 
+st.set_page_config(
+    page_title="E-Waste Topic Modeling",
+    page_icon="♻️",
+    layout="wide"
+)
+st.markdown("""
+<style>
+    .block-container {
+        max-width: 1400px;
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+    }
+
+    h1 {
+        font-size: 2.4rem !important;
+    }
+
+    h2 {
+        font-size: 1.8rem !important;
+    }
+
+    h3 {
+        font-size: 1.35rem !important;
+    }
+
+    p, label, .stMarkdown {
+        font-size: 1.05rem !important;
+    }
+
+    [data-testid="stMetricValue"] {
+        font-size: 2rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 import nltk
 
 for resource in [
@@ -452,7 +486,7 @@ if analyze_button:
 
         # Transform review using the trained vocabulary
         review_dtm = vectorizer.transform(
-            [review_text]
+            [lda_text]
         )
 
         # Get LDA topic probabilities
